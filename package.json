@@ -1,5 +1,5 @@
 {
-  "name": "manupdfjs-dist",
+  "name": "@commutatus/pdfjs-dist",
   "version": "3.2.146",
   "main": "build/pdf.js",
   "types": "types/src/pdf.d.ts",
