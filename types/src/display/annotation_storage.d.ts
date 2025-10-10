@@ -2,11 +2,6 @@
  * Key/value storage for annotation data in forms.
  */
 export class AnnotationStorage {
-    /**
-     * PLEASE NOTE: Only intended for usage within the API itself.
-     * @ignore
-     */
-    static getHash(map: any): string;
     onSetModified: any;
     onResetModified: any;
     onAnnotationEditor: any;
@@ -40,7 +35,14 @@ export class AnnotationStorage {
      * @returns {boolean}
      */
     has(key: string): boolean;
-    getAll(): any;
+    /**
+     * @returns {Object | null}
+     */
+    getAll(): Object | null;
+    /**
+     * @param {Object} obj
+     */
+    setAll(obj: Object): void;
     get size(): number;
     resetModified(): void;
     /**
@@ -51,7 +53,15 @@ export class AnnotationStorage {
      * PLEASE NOTE: Only intended for usage within the API itself.
      * @ignore
      */
-    get serializable(): Map<any, any> | null;
+    get serializable(): Readonly<{
+        map: null;
+        hash: "";
+        transfer: undefined;
+    }> | {
+        map: Map<any, any>;
+        hash: string;
+        transfer: any[];
+    };
     #private;
 }
 /**
@@ -65,6 +75,15 @@ export class PrintAnnotationStorage extends AnnotationStorage {
      * PLEASE NOTE: Only intended for usage within the API itself.
      * @ignore
      */
-    get serializable(): null;
+    get serializable(): {
+        map: any;
+        hash: any;
+        transfer: any;
+    };
     #private;
 }
+export const SerializableEmpty: Readonly<{
+    map: null;
+    hash: "";
+    transfer: undefined;
+}>;

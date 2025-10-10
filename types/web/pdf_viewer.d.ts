@@ -6,6 +6,8 @@ export type EventBus = import("./event_utils").EventBus;
 export type IDownloadManager = import("./interfaces").IDownloadManager;
 export type IL10n = import("./interfaces").IL10n;
 export type IPDFLinkService = import("./interfaces").IPDFLinkService;
+export type PDFFindController = import("./pdf_find_controller").PDFFindController;
+export type PDFScriptingManager = import("./pdf_scripting_manager").PDFScriptingManager;
 export type PDFViewerOptions = {
     /**
      * - The container for the viewer element.
@@ -22,7 +24,7 @@ export type PDFViewerOptions = {
     /**
      * - The navigation/linking service.
      */
-    linkService: IPDFLinkService;
+    linkService?: import("./interfaces").IPDFLinkService | undefined;
     /**
      * - The download manager
      * component.
@@ -32,12 +34,12 @@ export type PDFViewerOptions = {
      * - The find controller
      * component.
      */
-    findController?: any;
+    findController?: import("./pdf_find_controller").PDFFindController | undefined;
     /**
      * - The scripting manager
      * component.
      */
-    scriptingManager?: any;
+    scriptingManager?: import("./pdf_scripting_manager").PDFScriptingManager | undefined;
     /**
      * - The rendering queue object.
      */
@@ -56,17 +58,22 @@ export type PDFViewerOptions = {
     /**
      * - Controls if the annotation layer is
      * created, and if interactive form elements or `AnnotationStorage`-data are
-     * being rendered. The constants from {@link AnnotationMode } should be used;
-     * see also {@link RenderParameters } and {@link GetOperatorListParameters }.
+     * being rendered. The constants from {@link AnnotationMode} should be used;
+     * see also {@link RenderParameters} and {@link GetOperatorListParameters}.
      * The default value is `AnnotationMode.ENABLE_FORMS`.
      */
     annotationMode?: number | undefined;
     /**
      * - Enables the creation and editing
-     * of new Annotations. The constants from {@link AnnotationEditorType } should
+     * of new Annotations. The constants from {@link AnnotationEditorType} should
      * be used. The default value is `AnnotationEditorType.NONE`.
      */
     annotationEditorMode?: number | undefined;
+    /**
+     * - A comma separated list
+     * of colors to propose to highlight some text in the pdf.
+     */
+    annotationEditorHighlightColors?: string | undefined;
     /**
      * - Path for image resources, mainly
      * mainly for annotation icons. Include trailing slash.
@@ -78,25 +85,20 @@ export type PDFViewerOptions = {
      */
     enablePrintAutoRotate?: boolean | undefined;
     /**
-     * - Enables CSS only zooming. The default
-     * value is `false`.
-     */
-    useOnlyCssZoom?: boolean | undefined;
-    /**
      * - Allows to use an
      * OffscreenCanvas if needed.
      */
     isOffscreenCanvasSupported?: boolean | undefined;
     /**
      * - The maximum supported canvas size in
-     * total pixels, i.e. width * height. Use -1 for no limit. The default value
-     * is 4096 * 4096 (16 mega-pixels).
+     * total pixels, i.e. width * height. Use `-1` for no limit, or `0` for
+     * CSS-only zooming. The default value is 4096 * 4096 (16 mega-pixels).
      */
     maxCanvasPixels?: number | undefined;
     /**
      * - Localization service.
      */
-    l10n: IL10n;
+    l10n?: import("./interfaces").IL10n | undefined;
     /**
      * - Enables PDF document permissions,
      * when they exist. The default value is `false`.
@@ -110,16 +112,16 @@ export type PDFViewerOptions = {
     pageColors?: Object | undefined;
 };
 export namespace PagesCountLimit {
-    const FORCE_SCROLL_MODE_PAGE: number;
-    const FORCE_LAZY_PAGE_INIT: number;
-    const PAUSE_EAGER_PAGE_INIT: number;
+    let FORCE_SCROLL_MODE_PAGE: number;
+    let FORCE_LAZY_PAGE_INIT: number;
+    let PAUSE_EAGER_PAGE_INIT: number;
 }
 /**
  * @typedef {Object} PDFViewerOptions
  * @property {HTMLDivElement} container - The container for the viewer element.
  * @property {HTMLDivElement} [viewer] - The viewer element.
  * @property {EventBus} eventBus - The application event bus.
- * @property {IPDFLinkService} linkService - The navigation/linking service.
+ * @property {IPDFLinkService} [linkService] - The navigation/linking service.
  * @property {IDownloadManager} [downloadManager] - The download manager
  *   component.
  * @property {PDFFindController} [findController] - The find controller
@@ -140,18 +142,18 @@ export namespace PagesCountLimit {
  * @property {number} [annotationEditorMode] - Enables the creation and editing
  *   of new Annotations. The constants from {@link AnnotationEditorType} should
  *   be used. The default value is `AnnotationEditorType.NONE`.
+ * @property {string} [annotationEditorHighlightColors] - A comma separated list
+ *   of colors to propose to highlight some text in the pdf.
  * @property {string} [imageResourcesPath] - Path for image resources, mainly
  *   mainly for annotation icons. Include trailing slash.
  * @property {boolean} [enablePrintAutoRotate] - Enables automatic rotation of
  *   landscape pages upon printing. The default is `false`.
- * @property {boolean} [useOnlyCssZoom] - Enables CSS only zooming. The default
- *   value is `false`.
  * @property {boolean} [isOffscreenCanvasSupported] - Allows to use an
  *   OffscreenCanvas if needed.
  * @property {number} [maxCanvasPixels] - The maximum supported canvas size in
- *   total pixels, i.e. width * height. Use -1 for no limit. The default value
- *   is 4096 * 4096 (16 mega-pixels).
- * @property {IL10n} l10n - Localization service.
+ *   total pixels, i.e. width * height. Use `-1` for no limit, or `0` for
+ *   CSS-only zooming. The default value is 4096 * 4096 (16 mega-pixels).
+ * @property {IL10n} [l10n] - Localization service.
  * @property {boolean} [enablePermissions] - Enables PDF document permissions,
  *   when they exist. The default value is `false`.
  * @property {Object} [pageColors] - Overwrites background and foreground colors
@@ -170,7 +172,7 @@ export class PDFPageViewBuffer {
      */
     resize(newSize: any, idsToKeep?: null): void;
     has(view: any): boolean;
-    [Symbol.iterator](): IterableIterator<any>;
+    [Symbol.iterator](): SetIterator<any>;
     #private;
 }
 /**
@@ -184,19 +186,23 @@ export class PDFViewer {
     container: HTMLDivElement;
     viewer: Element | null;
     eventBus: import("./event_utils").EventBus;
-    linkService: import("./interfaces").IPDFLinkService;
+    linkService: import("./interfaces").IPDFLinkService | SimpleLinkService;
     downloadManager: import("./interfaces").IDownloadManager | null;
-    findController: any;
-    _scriptingManager: any;
-    removePageBorders: boolean;
-    textLayerMode: number;
+    findController: import("./pdf_find_controller").PDFFindController | null;
+    _scriptingManager: import("./pdf_scripting_manager").PDFScriptingManager | null;
     imageResourcesPath: string;
     enablePrintAutoRotate: boolean;
-    renderer: any;
-    useOnlyCssZoom: boolean;
+    removePageBorders: boolean | undefined;
     isOffscreenCanvasSupported: boolean;
     maxCanvasPixels: number | undefined;
-    l10n: import("./interfaces").IL10n;
+    l10n: {
+        getLanguage(): any;
+        getDirection(): any;
+        get(ids: any, args: null | undefined, fallback: any): Promise<any>;
+        translate(element: any): Promise<any>;
+        pause(): any;
+        resume(): any;
+    };
     pageColors: Object | null;
     defaultRenderingQueue: boolean;
     renderingQueue: PDFRenderingQueue | undefined;
@@ -212,6 +218,7 @@ export class PDFViewer {
     _onAfterDraw: any;
     get pagesCount(): number;
     getPageView(index: any): any;
+    getCachedPageViews(): Set<any>;
     /**
      * @type {boolean} - True if all {PDFPageView} objects are initialized.
      */
@@ -227,7 +234,7 @@ export class PDFViewer {
     /**
      * @param {number} val - The page number.
      */
-    set currentPageNumber(arg: number);
+    set currentPageNumber(val: number);
     /**
      * @type {number}
      */
@@ -241,7 +248,7 @@ export class PDFViewer {
     /**
      * @param {string} val - The page label.
      */
-    set currentPageLabel(arg: string | null);
+    set currentPageLabel(val: string);
     /**
      * @type {string|null} Returns the current page label, or `null` if no page
      *   labels exist.
@@ -250,7 +257,7 @@ export class PDFViewer {
     /**
      * @param {number} val - Scale of the pages in percents.
      */
-    set currentScale(arg: number);
+    set currentScale(val: number);
     /**
      * @type {number}
      */
@@ -258,7 +265,7 @@ export class PDFViewer {
     /**
      * @param val - The scale of the pages (in percent or predefined value).
      */
-    set currentScaleValue(arg: string);
+    set currentScaleValue(val: string);
     /**
      * @type {string}
      */
@@ -266,15 +273,17 @@ export class PDFViewer {
     /**
      * @param {number} rotation - The rotation of the pages (0, 90, 180, 270).
      */
-    set pagesRotation(arg: number);
+    set pagesRotation(rotation: number);
     /**
      * @type {number}
      */
     get pagesRotation(): number;
     _pagesRotation: any;
-    get firstPagePromise(): any;
-    get onePageRendered(): any;
-    get pagesPromise(): any;
+    get firstPagePromise(): Promise<any> | null;
+    get onePageRendered(): Promise<any> | null;
+    get pagesPromise(): Promise<any> | null;
+    get _layerProperties(): any;
+    getAllText(): Promise<string | null>;
     /**
      * @param {PDFDocumentProxy} pdfDocument
      */
@@ -299,22 +308,12 @@ export class PDFViewer {
         rotation: any;
         pdfOpenParams: string;
     } | null | undefined;
-    _firstPageCapability: any;
-    _onePageRenderedCapability: any;
-    _pagesCapability: any;
+    _firstPageCapability: PromiseCapability | undefined;
+    _onePageRenderedCapability: PromiseCapability | undefined;
+    _pagesCapability: PromiseCapability | undefined;
     _previousScrollMode: any;
     _spreadMode: any;
     _scrollUpdate(): void;
-    _setScaleUpdatePages(newScale: any, newValue: any, { noScroll, preset, drawingDelay }: {
-        noScroll?: boolean | undefined;
-        preset?: boolean | undefined;
-        drawingDelay?: number | undefined;
-    }): void;
-    /**
-     * @private
-     */
-    private get _pageWidthScaleFactor();
-    _setScale(value: any, options: any): void;
     /**
      * @param {string} label - The page label.
      * @returns {number|null} The page number corresponding to the page label,
@@ -366,14 +365,6 @@ export class PDFViewer {
     get isHorizontalScrollbarEnabled(): boolean;
     get isVerticalScrollbarEnabled(): boolean;
     _getVisiblePages(): Object;
-    /**
-     * @param {number} pageNumber
-     */
-    isPageVisible(pageNumber: number): any;
-    /**
-     * @param {number} pageNumber
-     */
-    isPageCached(pageNumber: number): any;
     cleanup(): void;
     /**
      * @private
@@ -394,17 +385,17 @@ export class PDFViewer {
      * @param {Promise<OptionalContentConfig>} promise - A promise that is
      *   resolved with an {@link OptionalContentConfig} instance.
      */
-    set optionalContentConfigPromise(arg: Promise<import("../src/display/optional_content_config").OptionalContentConfig | null>);
+    set optionalContentConfigPromise(promise: Promise<OptionalContentConfig>);
     /**
      * @type {Promise<OptionalContentConfig | null>}
      */
-    get optionalContentConfigPromise(): Promise<import("../src/display/optional_content_config").OptionalContentConfig | null>;
+    get optionalContentConfigPromise(): Promise<OptionalContentConfig | null>;
     /**
      * @param {number} mode - The direction in which the document pages should be
      *   laid out within the scrolling container.
      *   The constants from {ScrollMode} should be used.
      */
-    set scrollMode(arg: number);
+    set scrollMode(mode: number);
     /**
      * @type {number} One of the values in {ScrollMode}.
      */
@@ -415,7 +406,7 @@ export class PDFViewer {
      *   even-number pages (unless `SpreadMode.NONE` is used).
      *   The constants from {SpreadMode} should be used.
      */
-    set spreadMode(arg: number);
+    set spreadMode(mode: number);
     /**
      * @type {number} One of the values in {SpreadMode}.
      */
@@ -427,37 +418,83 @@ export class PDFViewer {
     private _getPageAdvance;
     /**
      * Go to the next page, taking scroll/spread-modes into account.
-     * @returns {boolean} Whether navigation occured.
+     * @returns {boolean} Whether navigation occurred.
      */
     nextPage(): boolean;
     /**
      * Go to the previous page, taking scroll/spread-modes into account.
-     * @returns {boolean} Whether navigation occured.
+     * @returns {boolean} Whether navigation occurred.
      */
     previousPage(): boolean;
     /**
-     * Increase the current zoom level one, or more, times.
-     * @param {number} [steps] - Defaults to zooming once.
-     * @param {Object|null} [options]
+     * @typedef {Object} ChangeScaleOptions
+     * @property {number} [drawingDelay]
+     * @property {number} [scaleFactor]
+     * @property {number} [steps]
      */
-    increaseScale(steps?: number | undefined, options?: Object | null | undefined): void;
+    /**
+     * Increase the current zoom level one, or more, times.
+     * @param {ChangeScaleOptions} [options]
+     */
+    increaseScale({ drawingDelay, scaleFactor, steps }?: {
+        drawingDelay?: number | undefined;
+        scaleFactor?: number | undefined;
+        steps?: number | undefined;
+    }): void;
     /**
      * Decrease the current zoom level one, or more, times.
-     * @param {number} [steps] - Defaults to zooming once.
-     * @param {Object|null} [options]
+     * @param {ChangeScaleOptions} [options]
      */
-    decreaseScale(steps?: number | undefined, options?: Object | null | undefined): void;
+    decreaseScale({ drawingDelay, scaleFactor, steps }?: {
+        drawingDelay?: number | undefined;
+        scaleFactor?: number | undefined;
+        steps?: number | undefined;
+    }): void;
     get containerTopLeft(): number[];
     /**
-     * @param {number} mode - AnnotationEditor mode (None, FreeText, Ink, ...)
+     * @typedef {Object} AnnotationEditorModeOptions
+     * @property {number} mode - The editor mode (none, FreeText, ink, ...).
+     * @property {string|null} [editId] - ID of the existing annotation to edit.
+     * @property {boolean} [isFromKeyboard] - True if the mode change is due to a
+     *   keyboard action.
      */
-    set annotationEditorMode(arg: number);
     /**
-     * @type {number}
+     * @param {AnnotationEditorModeOptions} options
      */
-    get annotationEditorMode(): number;
-    set annotationEditorParams(arg: any);
+    set annotationEditorMode({ mode, editId, isFromKeyboard }: {
+        /**
+         * - The editor mode (none, FreeText, ink, ...).
+         */
+        mode: number;
+        /**
+         * - ID of the existing annotation to edit.
+         */
+        editId?: string | null | undefined;
+        /**
+         * - True if the mode change is due to a
+         * keyboard action.
+         */
+        isFromKeyboard?: boolean | undefined;
+    });
+    get annotationEditorMode(): {
+        /**
+         * - The editor mode (none, FreeText, ink, ...).
+         */
+        mode: number;
+        /**
+         * - ID of the existing annotation to edit.
+         */
+        editId?: string | null | undefined;
+        /**
+         * - True if the mode change is due to a
+         * keyboard action.
+         */
+        isFromKeyboard?: boolean | undefined;
+    };
+    set annotationEditorParams({ type, value }: any);
     refresh(noUpdate?: boolean, updateArgs?: any): void;
     #private;
 }
 import { PDFRenderingQueue } from "./pdf_rendering_queue.js";
+import { SimpleLinkService } from "./pdf_link_service.js";
+import { PromiseCapability } from "../src/pdf";

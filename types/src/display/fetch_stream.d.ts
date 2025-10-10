@@ -15,12 +15,12 @@ export class PDFFetchStream implements IPDFStream {
 declare class PDFFetchStreamReader implements IPDFStreamReader {
     constructor(stream: any);
     _stream: any;
-    _reader: ReadableStreamDefaultReader<Uint8Array> | null;
+    _reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>> | null;
     _loaded: number;
     _filename: string | null;
     _withCredentials: any;
     _contentLength: any;
-    _headersCapability: import("../shared/util.js").PromiseCapability;
+    _headersCapability: PromiseCapability;
     _disableRange: any;
     _rangeChunkSize: any;
     _abortController: AbortController;
@@ -34,10 +34,7 @@ declare class PDFFetchStreamReader implements IPDFStreamReader {
     get isRangeSupported(): boolean;
     get isStreamingSupported(): boolean;
     read(): Promise<{
-        value: Uint8Array | undefined;
-        done: true;
-    } | {
-        value: ArrayBufferLike;
+        value: any;
         done: boolean;
     }>;
     cancel(reason: any): void;
@@ -46,22 +43,20 @@ declare class PDFFetchStreamReader implements IPDFStreamReader {
 declare class PDFFetchStreamRangeReader implements IPDFStreamRangeReader {
     constructor(stream: any, begin: any, end: any);
     _stream: any;
-    _reader: ReadableStreamDefaultReader<Uint8Array> | null;
+    _reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>> | null;
     _loaded: number;
     _withCredentials: any;
-    _readCapability: import("../shared/util.js").PromiseCapability;
+    _readCapability: PromiseCapability;
     _isStreamingSupported: boolean;
     _abortController: AbortController;
     _headers: Headers;
     onProgress: any;
     get isStreamingSupported(): boolean;
     read(): Promise<{
-        value: Uint8Array | undefined;
-        done: true;
-    } | {
-        value: ArrayBufferLike;
+        value: any;
         done: boolean;
     }>;
     cancel(reason: any): void;
 }
+import { PromiseCapability } from "../shared/util.js";
 export {};

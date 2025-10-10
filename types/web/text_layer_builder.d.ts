@@ -29,19 +29,29 @@ export type TextLayerBuilderOptions = {
  * contain text that matches the PDF text they are overlaying.
  */
 export class TextLayerBuilder {
-    constructor({ highlighter, accessibilityManager, isOffscreenCanvasSupported, }: {
+    static #textLayers: Map<any, any>;
+    static #selectionChangeAbortController: null;
+    static #removeGlobalSelectionListener(textLayerDiv: any): void;
+    static #enableGlobalSelectionListener(): void;
+    constructor({ highlighter, accessibilityManager, isOffscreenCanvasSupported, enablePermissions, }: {
         highlighter?: null | undefined;
         accessibilityManager?: null | undefined;
         isOffscreenCanvasSupported?: boolean | undefined;
+        enablePermissions?: boolean | undefined;
     });
     textContentItemsStr: any[];
     renderingDone: boolean;
     textDivs: any[];
-    textDivProperties: WeakMap<object, any>;
-    textLayerRenderTask: any;
+    textDivProperties: WeakMap<WeakKey, any>;
+    textLayerRenderTask: import("../src/display/text_layer.js").TextLayerRenderTask | null;
     highlighter: any;
     accessibilityManager: any;
     isOffscreenCanvasSupported: boolean;
+    /**
+     * Callback used to attach the textLayer to the DOM.
+     * @type {function}
+     */
+    onAppend: Function;
     div: HTMLDivElement;
     get numTextDivs(): number;
     /**

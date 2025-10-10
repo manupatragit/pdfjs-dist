@@ -9,17 +9,26 @@ export type AnnotationEditorLayer = import("./annotation_editor_layer.js").Annot
  * some action like copy/paste, undo/redo, ...
  */
 export class AnnotationEditorUIManager {
-    static _keyboardManager: KeyboardManager;
-    constructor(container: any, eventBus: any, annotationStorage: any);
+    static TRANSLATE_SMALL: number;
+    static TRANSLATE_BIG: number;
+    static get _keyboardManager(): any;
+    constructor(container: any, viewer: any, eventBus: any, pdfDocument: any, pageColors: any, highlightColors: any);
+    linkNodeTargetId: null;
+    _eventBus: any;
     viewParameters: {
         realScale: number;
         rotation: number;
     };
     destroy(): void;
+    get hcmFilter(): any;
+    get direction(): any;
+    get highlightColors(): any;
     onPageChanging({ pageNumber }: {
         pageNumber: any;
     }): void;
     focusMainContainer(): void;
+    findParent(x: any, y: any): any;
+    disableUserSelect(value?: boolean): void;
     addShouldRescale(editor: any): void;
     removeShouldRescale(editor: any): void;
     onScaleChanging({ scale }: {
@@ -28,11 +37,20 @@ export class AnnotationEditorUIManager {
     onRotationChanging({ pagesRotation }: {
         pagesRotation: any;
     }): void;
+    onLinkNodeTargetChanging({ id }: {
+        id: any;
+    }): void;
+    createLinkNode(targetId: any): void;
+    getDivForEditor(apiId: any): any;
     /**
      * Add an editor in the annotation storage.
      * @param {AnnotationEditor} editor
      */
     addToAnnotationStorage(editor: AnnotationEditor): void;
+    blur(): void;
+    focus(): void;
+    addEditListeners(): void;
+    removeEditListeners(): void;
     /**
      * Copy callback.
      * @param {ClipboardEvent} event
@@ -60,6 +78,13 @@ export class AnnotationEditorUIManager {
      * @param {Object} details
      */
     onEditingAction(details: Object): void;
+    loadAnnotations({ annotationsList }: {
+        annotationsList: any;
+    }): void;
+    parseLinkNodesFromJSON({ linkNodesList }: {
+        linkNodesList: any;
+    }): void;
+    dispatchLinkNodeReady(): void;
     /**
      * Set the editing state.
      * It can be useful to temporarily disable it when the user is editing a
@@ -74,6 +99,7 @@ export class AnnotationEditorUIManager {
      */
     getId(): string;
     get currentLayer(): any;
+    getLayer(pageIndex: any): any;
     get currentPageIndex(): number;
     /**
      * Add a new layer for a page which will contains the editors.
@@ -88,22 +114,27 @@ export class AnnotationEditorUIManager {
     /**
      * Change the editor mode (None, FreeText, Ink, ...)
      * @param {number} mode
+     * @param {string|null} editId
+     * @param {boolean} [isFromKeyboard] - true if the mode change is due to a
+     *   keyboard action.
      */
-    updateMode(mode: number): void;
+    updateMode(mode: number, editId?: string | null, isFromKeyboard?: boolean): void;
+    addNewEditorFromKeyboard(): void;
     /**
      * Update the toolbar if it's required to reflect the tool currently used.
      * @param {number} mode
      * @returns {undefined}
      */
-    updateToolbar(mode: number): undefined;
+    updateModeAndToolbar(mode: number): undefined;
     /**
      * Update a parameter in the current editor or globally.
      * @param {number} type
      * @param {*} value
      */
     updateParams(type: number, value: any): void;
+    enableWaiting(mustWait?: boolean): void;
     /**
-     * Get all the editors belonging to a give page.
+     * Get all the editors belonging to a given page.
      * @param {number} pageIndex
      * @returns {Array<AnnotationEditor>}
      */
@@ -125,6 +156,22 @@ export class AnnotationEditorUIManager {
      */
     removeEditor(editor: AnnotationEditor): void;
     /**
+     * The annotation element with the given id has been deleted.
+     * @param {AnnotationEditor} editor
+     */
+    addDeletedAnnotationElement(editor: AnnotationEditor): void;
+    /**
+     * Check if the annotation element with the given id has been deleted.
+     * @param {string} annotationElementId
+     * @returns {boolean}
+     */
+    isDeletedAnnotationElement(annotationElementId: string): boolean;
+    /**
+     * The annotation element with the given id have been restored.
+     * @param {AnnotationEditor} editor
+     */
+    removeDeletedAnnotationElement(editor: AnnotationEditor): void;
+    /**
      * Set the given editor as the active one.
      * @param {AnnotationEditor} editor
      */
@@ -144,12 +191,14 @@ export class AnnotationEditorUIManager {
      * @param {AnnotationEditor} editor
      */
     isSelected(editor: AnnotationEditor): boolean;
+    get firstSelectedEditor(): any;
     /**
      * Unselect an editor.
      * @param {AnnotationEditor} editor
      */
     unselect(editor: AnnotationEditor): void;
     get hasSelection(): boolean;
+    get isEnterHandled(): any;
     /**
      * Undo the last command.
      */
@@ -158,16 +207,31 @@ export class AnnotationEditorUIManager {
      * Redo the last undoed command.
      */
     redo(): void;
+    sendSerializedEditor: (editor: any) => void;
     /**
      * Add a command to execute (cmd) and another one to undo it.
      * @param {Object} params
      */
-    addCommands(params: Object): void;
+    addCommands(params: Object, editors: any): void;
     /**
      * Delete the current editor or all.
      */
-    delete(): void;
+    delete(isKeyboardEvent?: boolean): void;
     commitOrRemove(): void;
+    hasSomethingToControl(): boolean;
+    addEditToolbarToEditor({ id, editor, props, div }: {
+        id: any;
+        editor: any;
+        props: any;
+        div: any;
+    }): void;
+    addStickyNoteMenuButton({ id, editor, props, div }: {
+        id: any;
+        editor: any;
+        props: any;
+        div: any;
+    }): void;
+    removeExternalElement(args: any): void;
     /**
      * Select all the editors.
      */
@@ -176,12 +240,35 @@ export class AnnotationEditorUIManager {
      * Unselect all the selected editors.
      */
     unselectAll(): void;
+    translateSelectedEditors(x: any, y: any, noCommit?: boolean): void;
+    /**
+     * Set up the drag session for moving the selected editors.
+     */
+    setUpDragSession(): void;
+    /**
+     * Ends the drag session.
+     * @returns {boolean} true if at least one editor has been moved.
+     */
+    endDragSession(): boolean;
+    /**
+     * Drag the set of selected editors.
+     * @param {number} tx
+     * @param {number} ty
+     */
+    dragSelectedEditors(tx: number, ty: number): void;
+    /**
+     * Rebuild the editor (usually on undo/redo actions) on a potentially
+     * non-rendered page.
+     * @param {AnnotationEditor} editor
+     */
+    rebuild(editor: AnnotationEditor): void;
+    get isEditorHandlingKeyboard(): any;
     /**
      * Is the current editor the one passed as argument?
      * @param {AnnotationEditor} editor
      * @returns
      */
-    isActive(editor: AnnotationEditor): boolean;
+    isActive(editor: AnnotationEditor): editor is never;
     /**
      * Get the current active editor.
      * @returns {AnnotationEditor|null}
@@ -192,6 +279,7 @@ export class AnnotationEditorUIManager {
      * @returns {number}
      */
     getMode(): number;
+    get imageManager(): any;
     #private;
 }
 export function bindEvents(obj: any, element: any, names: any): void;
@@ -284,11 +372,11 @@ export class KeyboardManager {
     /**
      * Execute a callback, if any, for a given keyboard event.
      * The self is used as `this` in the callback.
-     * @param {Object} self.
+     * @param {Object} self
      * @param {KeyboardEvent} event
      * @returns
      */
-    exec(self: any, event: KeyboardEvent): void;
+    exec(self: Object, event: KeyboardEvent): void;
     #private;
 }
 /**

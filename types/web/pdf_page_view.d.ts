@@ -27,7 +27,7 @@ export type PDFPageViewOptions = {
     defaultViewport: PageViewport;
     /**
      * -
-     * A promise that is resolved with an {@link OptionalContentConfig } instance.
+     * A promise that is resolved with an {@link OptionalContentConfig} instance.
      * The default value is `null`.
      */
     optionalContentConfigPromise?: Promise<import("../src/display/optional_content_config").OptionalContentConfig> | undefined;
@@ -44,8 +44,8 @@ export type PDFPageViewOptions = {
     /**
      * - Controls if the annotation layer is
      * created, and if interactive form elements or `AnnotationStorage`-data are
-     * being rendered. The constants from {@link AnnotationMode } should be used;
-     * see also {@link RenderParameters } and {@link GetOperatorListParameters }.
+     * being rendered. The constants from {@link AnnotationMode} should be used;
+     * see also {@link RenderParameters} and {@link GetOperatorListParameters}.
      * The default value is `AnnotationMode.ENABLE_FORMS`.
      */
     annotationMode?: number | undefined;
@@ -55,19 +55,14 @@ export type PDFPageViewOptions = {
      */
     imageResourcesPath?: string | undefined;
     /**
-     * - Enables CSS only zooming. The default
-     * value is `false`.
-     */
-    useOnlyCssZoom?: boolean | undefined;
-    /**
      * - Allows to use an
      * OffscreenCanvas if needed.
      */
     isOffscreenCanvasSupported?: boolean | undefined;
     /**
      * - The maximum supported canvas size in
-     * total pixels, i.e. width * height. Use -1 for no limit. The default value
-     * is 4096 * 4096 (16 mega-pixels).
+     * total pixels, i.e. width * height. Use `-1` for no limit, or `0` for
+     * CSS-only zooming. The default value is 4096 * 4096 (16 mega-pixels).
      */
     maxCanvasPixels?: number | undefined;
     /**
@@ -81,10 +76,10 @@ export type PDFPageViewOptions = {
      */
     l10n?: import("./interfaces").IL10n | undefined;
     /**
-     * - The function that is used to lookup
+     * - The object that is used to lookup
      * the necessary layer-properties.
      */
-    layerProperties?: Function | undefined;
+    layerProperties?: Object | undefined;
 };
 /**
  * @implements {IRenderableView}
@@ -103,32 +98,24 @@ export class PDFPageView implements IRenderableView {
     viewport: import("../src/display/display_utils").PageViewport;
     pdfPageRotate: number;
     _optionalContentConfigPromise: Promise<import("../src/display/optional_content_config").OptionalContentConfig> | null;
-    hasRestrictedScaling: boolean;
-    textLayerMode: number;
     imageResourcesPath: string;
-    useOnlyCssZoom: boolean;
     isOffscreenCanvasSupported: boolean;
     maxCanvasPixels: any;
     pageColors: Object | null;
     eventBus: import("./event_utils").EventBus;
     renderingQueue: import("./pdf_rendering_queue").PDFRenderingQueue | undefined;
-    renderer: any;
     l10n: {
-        getLanguage(): Promise<string>;
-        getDirection(): Promise<string>;
-        get(key: any, args?: null, fallback?: any): Promise<any>;
-        translate(element: any): Promise<void>;
+        getLanguage(): any;
+        getDirection(): any;
+        get(ids: any, args: null | undefined, fallback: any): Promise<any>;
+        translate(element: any): Promise<any>;
+        pause(): any;
+        resume(): any;
     };
-    paintTask: {
-        promise: any;
-        onRenderContinue(cont: any): void;
-        cancel(extraDelay?: number): void;
-        readonly separateAnnots: any;
-    } | null;
-    paintedViewportMap: WeakMap<object, any>;
+    renderTask: any;
     resume: (() => void) | null;
-    _renderError: any;
     _isStandalone: boolean | undefined;
+    _container: HTMLDivElement | undefined;
     _annotationCanvasMap: any;
     annotationLayer: AnnotationLayerBuilder | null;
     annotationEditorLayer: AnnotationEditorLayerBuilder | null;
@@ -136,8 +123,9 @@ export class PDFPageView implements IRenderableView {
     zoomLayer: ParentNode | null;
     xfaLayer: XfaLayerBuilder | null;
     structTreeLayer: any;
+    drawLayer: any;
     div: HTMLDivElement;
-    set renderingState(arg: number);
+    set renderingState(state: number);
     get renderingState(): number;
     setPdfPage(pdfPage: any): void;
     destroy(): void;
@@ -153,11 +141,32 @@ export class PDFPageView implements IRenderableView {
         keepXfaLayer?: boolean | undefined;
         keepTextLayer?: boolean | undefined;
     }): void;
-    loadingIconDiv: HTMLDivElement | undefined;
+    /**
+     * @typedef {Object} PDFPageViewUpdateParameters
+     * @property {number} [scale] The new scale, if specified.
+     * @property {number} [rotation] The new rotation, if specified.
+     * @property {Promise<OptionalContentConfig>} [optionalContentConfigPromise]
+     *   A promise that is resolved with an {@link OptionalContentConfig}
+     *   instance. The default value is `null`.
+     * @property {number} [drawingDelay]
+     */
+    /**
+     * Update e.g. the scale and/or rotation of the page.
+     * @param {PDFPageViewUpdateParameters} params
+     */
     update({ scale, rotation, optionalContentConfigPromise, drawingDelay, }: {
+        /**
+         * The new scale, if specified.
+         */
         scale?: number | undefined;
-        rotation?: null | undefined;
-        optionalContentConfigPromise?: null | undefined;
+        /**
+         * The new rotation, if specified.
+         */
+        rotation?: number | undefined;
+        /**
+         * A promise that is resolved with an {@link OptionalContentConfig}instance. The default value is `null`.
+         */
+        optionalContentConfigPromise?: Promise<import("../src/display/optional_content_config").OptionalContentConfig> | undefined;
         drawingDelay?: number | undefined;
     }): void;
     /**
@@ -181,23 +190,10 @@ export class PDFPageView implements IRenderableView {
     }): void;
     get width(): number;
     get height(): number;
-    getPagePoint(x: any, y: any): Object;
-    draw(): any;
-    paintOnCanvas(canvasWrapper: any): {
-        promise: any;
-        onRenderContinue(cont: any): void;
-        cancel(extraDelay?: number): void;
-        readonly separateAnnots: any;
-    };
+    getPagePoint(x: any, y: any): any[];
+    draw(): Promise<any>;
     canvas: HTMLCanvasElement | undefined;
     outputScale: OutputScale | undefined;
-    paintOnSvg(wrapper: any): {
-        promise: any;
-        onRenderContinue(cont: any): void;
-        cancel(): void;
-        readonly separateAnnots: boolean;
-    };
-    svg: any;
     /**
      * @param {string|null} label
      */

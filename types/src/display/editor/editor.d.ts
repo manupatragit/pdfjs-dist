@@ -1,5 +1,4 @@
 export type AnnotationEditorLayer = import("./annotation_editor_layer.js").AnnotationEditorLayer;
-export type AnnotationEditorUIManager = import("./tools.js").AnnotationEditorUIManager;
 export type AnnotationEditorParameters = {
     /**
      * - the global manager
@@ -34,9 +33,43 @@ export type AnnotationEditorParameters = {
  * Base class for editors.
  */
 export class AnnotationEditor {
+    static _borderLineWidth: number;
     static _colorManager: ColorManager;
     static _zIndex: number;
+    static get _resizerKeyboardManager(): any;
     static get _defaultLineColor(): any;
+    static deleteAnnotationElement(editor: any): void;
+    /**
+     * Initialize the l10n stuff for this type of editor.
+     * @param {Object} l10n
+     */
+    static initialize(l10n: Object, options?: null): void;
+    /**
+     * Update the default parameters for this type of editor.
+     * @param {number} _type
+     * @param {*} _value
+     */
+    static updateDefaultParams(_type: number, _value: any): void;
+    /**
+     * Get the default properties to set in the UI for this type of editor.
+     * @returns {Array}
+     */
+    static get defaultPropertiesToUpdate(): any[];
+    /**
+     * Check if this kind of editor is able to handle the given mime type for
+     * pasting.
+     * @param {string} mime
+     * @returns {boolean}
+     */
+    static isHandlingMimeForPasting(mime: string): boolean;
+    /**
+     * Extract the data from the clipboard item and delegate the creation of the
+     * editor to the parent.
+     * @param {DataTransferItem} item
+     * @param {AnnotationEditorLayer} parent
+     */
+    static paste(item: DataTransferItem, parent: AnnotationEditorLayer): void;
+    static #rotatePoint(x: any, y: any, angle: any): any[];
     /**
      * Deserialize the editor.
      * The result of the deserialization is a new editor.
@@ -44,14 +77,25 @@ export class AnnotationEditor {
      * @param {Object} data
      * @param {AnnotationEditorLayer} parent
      * @param {AnnotationEditorUIManager} uiManager
-     * @returns {AnnotationEditor}
+     * @returns {AnnotationEditor | null}
      */
-    static deserialize(data: Object, parent: AnnotationEditorLayer, uiManager: AnnotationEditorUIManager): AnnotationEditor;
+    static deserialize(data: Object, parent: AnnotationEditorLayer, uiManager: AnnotationEditorUIManager): AnnotationEditor | null;
+    static get MIN_SIZE(): number;
+    static canCreateNewEmptyEditor(): boolean;
     /**
      * @param {AnnotationEditorParameters} parameters
      */
     constructor(parameters: AnnotationEditorParameters);
+    disableToolbar: boolean;
+    _initialOptions: any;
     _uiManager: null;
+    _focusEventsAllowed: boolean;
+    _l10nPromise: null;
+    _wasDragged: boolean;
+    selectedText: null;
+    apiId: null;
+    ignoreNextChangeEvent: boolean;
+    wasAddedFromApi: boolean;
     parent: import("./annotation_editor_layer.js").AnnotationEditorLayer;
     id: string;
     width: any;
@@ -59,12 +103,30 @@ export class AnnotationEditor {
     pageIndex: number;
     name: any;
     div: HTMLDivElement | null;
-    rotation: any;
+    annotationElementId: any;
+    _willKeepAspectRatio: boolean;
+    _structTreeParentId: any;
+    rotation: number;
+    pageRotation: number;
     pageDimensions: any[];
     pageTranslation: any[];
     x: number;
     y: number;
     isAttachedToDOM: boolean;
+    deleted: boolean;
+    get editorType(): any;
+    /**
+     * Get the properties to update in the UI for this editor.
+     * @returns {Array}
+     */
+    get propertiesToUpdate(): any[];
+    set _isDraggable(value: boolean);
+    get _isDraggable(): boolean;
+    /**
+     * @returns {boolean} true if the editor handles the Enter key itself.
+     */
+    get isEnterHandled(): boolean;
+    center(): void;
     /**
      * Add some commands into the CommandManager (undo/redo stuff).
      * @param {Object} params
@@ -96,13 +158,6 @@ export class AnnotationEditor {
     commit(): void;
     addToAnnotationStorage(): void;
     /**
-     * We use drag-and-drop in order to move an editor on a page.
-     * @param {DragEvent} event
-     */
-    dragstart(event: DragEvent): void;
-    startX: number | undefined;
-    startY: number | undefined;
-    /**
      * Set the editor position within its parent.
      * @param {number} x
      * @param {number} y
@@ -117,13 +172,32 @@ export class AnnotationEditor {
      */
     translate(x: number, y: number): void;
     /**
+     * Translate the editor position within its page and adjust the scroll
+     * in order to have the editor in the view.
+     * @param {number} x - x-translation in page coordinates.
+     * @param {number} y - y-translation in page coordinates.
+     */
+    translateInPage(x: number, y: number): void;
+    drag(tx: any, ty: any): void;
+    /**
+     * Fix the position of the editor in order to keep it inside its parent page.
+     * @param {number} [rotation] - the rotation of the page.
+     */
+    fixAndSetPosition(rotation?: number): void;
+    /**
      * Convert a screen translation into a page one.
      * @param {number} x
      * @param {number} y
      */
-    screenToPageTranslation(x: number, y: number): number[];
+    screenToPageTranslation(x: number, y: number): any[];
+    /**
+     * Convert a page translation into a screen one.
+     * @param {number} x
+     * @param {number} y
+     */
+    pageTranslationToScreen(x: number, y: number): any[];
     get parentScale(): any;
-    get parentRotation(): any;
+    get parentRotation(): number;
     get parentDimensions(): number[];
     /**
      * Set the dimensions of this editor.
@@ -138,16 +212,31 @@ export class AnnotationEditor {
      */
     getInitialTranslation(): Array<number>;
     /**
-     * Render this editor in a div.
-     * @returns {HTMLDivElement}
+     * Add a toolbar for this editor.
+     * @returns {Promise<EditorToolbar|null>}
      */
-    render(): HTMLDivElement;
+    addEditToolbar(props?: {}): Promise<EditorToolbar | null>;
+    removeEditToolbar(): void;
+    getClientDimensions(): DOMRect;
+    /**
+     * Render this editor in a div.
+     * @returns {HTMLDivElement | null}
+     */
+    render(): HTMLDivElement | null;
     /**
      * Onpointerdown callback.
      * @param {PointerEvent} event
      */
     pointerdown(event: PointerEvent): void;
-    getRect(tx: any, ty: any): any[];
+    moveInDOM(): void;
+    _setParentAndPosition(parent: any, x: any, y: any): void;
+    /**
+     * Convert the current rect into a page one.
+     * @param {number} tx - x-translation in screen coordinates.
+     * @param {number} ty - y-translation in screen coordinates.
+     * @param {number} [rotation] - the rotation of the page.
+     */
+    getRect(tx: number, ty: number, rotation?: number): any[];
     getRectInCurrentCoords(rect: any, pageHeight: any): any[];
     /**
      * Executed once this editor has been rendered.
@@ -172,7 +261,7 @@ export class AnnotationEditor {
      */
     isInEditMode(): boolean;
     /**
-     * If it returns true, then this editor handle the keyboard
+     * If it returns true, then this editor handles the keyboard
      * events itself.
      * @returns {boolean}
      */
@@ -189,18 +278,42 @@ export class AnnotationEditor {
      */
     rebuild(): void;
     /**
+     * Rotate the editor.
+     * @param {number} angle
+     */
+    rotate(_angle: any): void;
+    /**
      * Serialize the editor.
      * The result of the serialization will be used to construct a
      * new annotation to add to the pdf document.
      *
      * To implement in subclasses.
+     * @param {boolean} [isForCopying]
+     * @param {Object | null} [context]
+     * @returns {Object | null}
      */
-    serialize(): void;
+    serialize(isForCopying?: boolean, context?: Object | null): Object | null;
     /**
      * Remove this editor.
      * It's used on ctrl+backspace action.
      */
     remove(): void;
+    /**
+     * @returns {boolean} true if this editor can be resized.
+     */
+    get isResizable(): boolean;
+    /**
+     * Add the resizers to this editor.
+     */
+    makeResizable(): void;
+    get toolbarPosition(): null;
+    /**
+     * onkeydown callback.
+     * @param {KeyboardEvent} event
+     */
+    keydown(event: KeyboardEvent): void;
+    _resizeWithKeyboard(x: any, y: any): void;
+    _stopResizingWithKeyboard(): void;
     /**
      * Select this editor.
      */
@@ -226,24 +339,33 @@ export class AnnotationEditor {
      */
     enableEditing(): void;
     /**
-     * Get some properties to update in the UI.
-     * @returns {Object}
+     * The editor is about to be edited.
      */
-    get propertiesToUpdate(): Object;
+    enterInEditMode(): void;
+    get localParams(): {};
     /**
      * Get the div which really contains the displayed content.
+     * @returns {HTMLDivElement | undefined}
      */
-    get contentDiv(): HTMLDivElement | null;
+    get contentDiv(): HTMLDivElement | undefined;
     /**
      * When set to true, it means that this editor is currently edited.
      * @param {boolean} value
      */
-    set isEditing(arg: boolean);
+    set isEditing(value: boolean);
     /**
      * If true then the editor is currently edited.
      * @type {boolean}
      */
     get isEditing(): boolean;
+    /**
+     * Set the aspect ratio to use when resizing.
+     * @param {number} width
+     * @param {number} height
+     */
+    setAspectRatio(width: number, height: number): void;
     #private;
 }
+import { AnnotationEditorUIManager } from "./tools.js";
+import { EditorToolbar } from "./toolbar.js";
 import { ColorManager } from "./tools.js";

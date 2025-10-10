@@ -14,8 +14,12 @@ export type DocumentInitParameters = {
     url?: string | URL | undefined;
     /**
      * - Binary PDF data.
-     * Use typed arrays (Uint8Array) to improve the memory usage. If PDF data is
+     * Use TypedArrays (Uint8Array) to improve the memory usage. If PDF data is
      * BASE64-encoded, use `atob()` to convert it to a binary string first.
+     *
+     * NOTE: If TypedArrays are used they will generally be transferred to the
+     * worker-thread. This will help reduce main-thread memory usage, however
+     * it will take ownership of the TypedArrays.
      */
     data?: BinaryData | undefined;
     /**
@@ -33,12 +37,6 @@ export type DocumentInitParameters = {
      */
     password?: string | undefined;
     /**
-     * - A typed array with the first portion
-     * or all of the pdf data. Used by the extension since some data is already
-     * loaded before the switch to range requests.
-     */
-    initialData?: TypedArray | undefined;
-    /**
      * - The PDF file length. It's used for progress
      * reports and range requests operations.
      */
@@ -50,7 +48,7 @@ export type DocumentInitParameters = {
     range?: PDFDataRangeTransport | undefined;
     /**
      * - Specify maximum number of bytes fetched
-     * per range request. The default value is {@link DEFAULT_RANGE_CHUNK_SIZE }.
+     * per range request. The default value is {@link DEFAULT_RANGE_CHUNK_SIZE}.
      */
     rangeChunkSize?: number | undefined;
     /**
@@ -60,7 +58,7 @@ export type DocumentInitParameters = {
     worker?: PDFWorker | undefined;
     /**
      * - Controls the logging level; the constants
-     * from {@link VerbosityLevel } should be used.
+     * from {@link VerbosityLevel} should be used.
      */
     verbosity?: number | undefined;
     /**
@@ -76,7 +74,7 @@ export type DocumentInitParameters = {
     cMapUrl?: string | undefined;
     /**
      * - Specifies if the Adobe CMaps are binary
-     * packed or not.
+     * packed or not. The default value is `true`.
      */
     cMapPacked?: boolean | undefined;
     /**
@@ -140,6 +138,12 @@ export type DocumentInitParameters = {
      */
     isOffscreenCanvasSupported?: boolean | undefined;
     /**
+     * - The integer value is used to
+     * know when an image must be resized (uses `OffscreenCanvas` in the worker).
+     * If it's -1 then a possibly slow algorithm is used to guess the max value.
+     */
+    canvasMaxAreaInBytes?: number | undefined;
+    /**
      * - By default fonts are converted to
      * OpenType fonts and loaded via the Font Loading API or `@font-face` rules.
      * If disabled, fonts will be rendered using a built-in font renderer that
@@ -193,9 +197,17 @@ export type DocumentInitParameters = {
      * (see `web/debugger.js`). The default value is `false`.
      */
     pdfBug?: boolean | undefined;
+    /**
+     * - The factory instance that will be used
+     * when creating canvases. The default value is {new DOMCanvasFactory()}.
+     */
+    canvasFactory?: Object | undefined;
+    /**
+     * - A factory instance that will be used
+     * to create SVG filters when rendering some images on the main canvas.
+     */
+    filterFactory?: Object | undefined;
 };
-export type GetDocumentParameters = string | URL | TypedArray | ArrayBuffer | PDFDataRangeTransport | DocumentInitParameters;
-export type IPDFStreamFactory = Function;
 export type OnProgressParameters = {
     /**
      * - Currently loaded number of bytes.
@@ -240,15 +252,15 @@ export type GetViewportParameters = {
  */
 export type getTextContentParameters = {
     /**
-     * - Do not attempt to combine
-     * same line {@link TextItem }'s. The default value is `false`.
-     */
-    disableCombineTextItems: boolean;
-    /**
      * - When true include marked
      * content items in the items array of TextContent. The default is `false`.
      */
     includeMarkedContent?: boolean | undefined;
+    /**
+     * - When true the text is *not*
+     * normalized in the worker-thread. The default is `false`.
+     */
+    disableNormalization?: boolean | undefined;
 };
 /**
  * Page text content.
@@ -256,12 +268,12 @@ export type getTextContentParameters = {
 export type TextContent = {
     /**
      * - Array of
-     * {@link TextItem } and {@link TextMarkedContent } objects. TextMarkedContent
+     * {@link TextItem} and {@link TextMarkedContent} objects. TextMarkedContent
      * items are included when includeMarkedContent is true.
      */
     items: Array<TextItem | TextMarkedContent>;
     /**
-     * - {@link TextStyle } objects,
+     * - {@link TextStyle} objects,
      * indexed by font name.
      */
     styles: {
@@ -354,9 +366,10 @@ export type GetAnnotationsParameters = {
  */
 export type RenderParameters = {
     /**
-     * - A 2D context of a DOM Canvas object.
+     * - A 2D context of a DOM
+     * Canvas object.
      */
-    canvasContext: Object;
+    canvasContext: CanvasRenderingContext2D;
     /**
      * - Rendering viewport obtained by calling
      * the `PDFPageProxy.getViewport` method.
@@ -370,7 +383,7 @@ export type RenderParameters = {
     /**
      * Controls which annotations are rendered
      * onto the canvas, for annotations with appearance-data; the values from
-     * {@link AnnotationMode } should be used. The following values are supported:
+     * {@link AnnotationMode} should be used. The following values are supported:
      * - `AnnotationMode.DISABLE`, which disables all annotations.
      * - `AnnotationMode.ENABLE`, which includes all possible annotations (thus
      * it also depends on the `intent`-option, see above).
@@ -378,7 +391,7 @@ export type RenderParameters = {
      * interactive form elements (those will be rendered in the display layer).
      * - `AnnotationMode.ENABLE_STORAGE`, which includes all possible annotations
      * (as above) but where interactive form elements are updated with data
-     * from the {@link AnnotationStorage }-instance; useful e.g. for printing.
+     * from the {@link AnnotationStorage}-instance; useful e.g. for printing.
      * The default value is `AnnotationMode.ENABLE`.
      */
     annotationMode?: number | undefined;
@@ -388,12 +401,8 @@ export type RenderParameters = {
      */
     transform?: any[] | undefined;
     /**
-     * - The factory instance that will be used
-     * when creating canvases. The default value is {new DOMCanvasFactory()}.
-     */
-    canvasFactory?: Object | undefined;
-    /**
-     * - Background to use for the canvas.
+     * - Background
+     * to use for the canvas.
      * Any valid `canvas.fillStyle` can be used: a `DOMString` parsed as CSS
      * <color> value, a `CanvasGradient` object (a linear or radial gradient) or
      * a `CanvasPattern` object (a repetitive image). The default value is
@@ -402,7 +411,7 @@ export type RenderParameters = {
      * NOTE: This option may be partially, or completely, ignored when the
      * `pageColors`-option is used.
      */
-    background?: string | Object | undefined;
+    background?: string | CanvasGradient | CanvasPattern | undefined;
     /**
      * - Overwrites background and foreground colors
      * with user defined ones in order to improve readability in high contrast
@@ -411,7 +420,7 @@ export type RenderParameters = {
     pageColors?: Object | undefined;
     /**
      * -
-     * A promise that should resolve with an {@link OptionalContentConfig }created from `PDFDocumentProxy.getOptionalContentConfig`. If `null`,
+     * A promise that should resolve with an {@link OptionalContentConfig}created from `PDFDocumentProxy.getOptionalContentConfig`. If `null`,
      * the configuration will be fetched automatically with the default visibility
      * states set.
      */
@@ -435,7 +444,7 @@ export type GetOperatorListParameters = {
     /**
      * Controls which annotations are included
      * in the operatorList, for annotations with appearance-data; the values from
-     * {@link AnnotationMode } should be used. The following values are supported:
+     * {@link AnnotationMode} should be used. The following values are supported:
      * - `AnnotationMode.DISABLE`, which disables all annotations.
      * - `AnnotationMode.ENABLE`, which includes all possible annotations (thus
      * it also depends on the `intent`-option, see above).
@@ -443,7 +452,7 @@ export type GetOperatorListParameters = {
      * interactive form elements (those will be rendered in the display layer).
      * - `AnnotationMode.ENABLE_STORAGE`, which includes all possible annotations
      * (as above) but where interactive form elements are updated with data
-     * from the {@link AnnotationStorage }-instance; useful e.g. for printing.
+     * from the {@link AnnotationStorage}-instance; useful e.g. for printing.
      * The default value is `AnnotationMode.ENABLE`.
      */
     annotationMode?: number | undefined;
@@ -455,7 +464,7 @@ export type GetOperatorListParameters = {
 export type StructTreeNode = {
     /**
      * - Array of
-     * {@link StructTreeNode } and {@link StructTreeContent } objects.
+     * {@link StructTreeNode} and {@link StructTreeContent} objects.
      */
     children: Array<StructTreeNode | StructTreeContent>;
     /**
@@ -500,18 +509,19 @@ export type PDFWorkerParameters = {
     /**
      * - The `workerPort` object.
      */
-    port?: Object | undefined;
+    port?: Worker | undefined;
     /**
      * - Controls the logging level;
-     * the constants from {@link VerbosityLevel } should be used.
+     * the constants from {@link VerbosityLevel} should be used.
      */
     verbosity?: number | undefined;
 };
 /** @type {string} */
 export const build: string;
-export let DefaultCanvasFactory: typeof DOMCanvasFactory;
-export let DefaultCMapReaderFactory: typeof DOMCMapReaderFactory;
-export let DefaultStandardFontDataFactory: typeof DOMStandardFontDataFactory;
+export const DefaultCanvasFactory: typeof DOMCanvasFactory | typeof NodeCanvasFactory;
+export const DefaultCMapReaderFactory: typeof NodeCMapReaderFactory;
+export const DefaultFilterFactory: typeof DOMFilterFactory | typeof NodeFilterFactory;
+export const DefaultStandardFontDataFactory: typeof NodeStandardFontDataFactory;
 /**
  * @typedef { Int8Array | Uint8Array | Uint8ClampedArray |
  *            Int16Array | Uint16Array |
@@ -533,16 +543,17 @@ export let DefaultStandardFontDataFactory: typeof DOMStandardFontDataFactory;
  * @typedef {Object} DocumentInitParameters
  * @property {string | URL} [url] - The URL of the PDF.
  * @property {BinaryData} [data] - Binary PDF data.
- *   Use typed arrays (Uint8Array) to improve the memory usage. If PDF data is
+ *   Use TypedArrays (Uint8Array) to improve the memory usage. If PDF data is
  *   BASE64-encoded, use `atob()` to convert it to a binary string first.
+ *
+ *   NOTE: If TypedArrays are used they will generally be transferred to the
+ *   worker-thread. This will help reduce main-thread memory usage, however
+ *   it will take ownership of the TypedArrays.
  * @property {Object} [httpHeaders] - Basic authentication headers.
  * @property {boolean} [withCredentials] - Indicates whether or not
  *   cross-site Access-Control requests should be made using credentials such
  *   as cookies or authorization headers. The default is `false`.
  * @property {string} [password] - For decrypting password-protected PDFs.
- * @property {TypedArray} [initialData] - A typed array with the first portion
- *   or all of the pdf data. Used by the extension since some data is already
- *   loaded before the switch to range requests.
  * @property {number} [length] - The PDF file length. It's used for progress
  *   reports and range requests operations.
  * @property {PDFDataRangeTransport} [range] - Allows for using a custom range
@@ -559,7 +570,7 @@ export let DefaultStandardFontDataFactory: typeof DOMStandardFontDataFactory;
  * @property {string} [cMapUrl] - The URL where the predefined Adobe CMaps are
  *   located. Include the trailing slash.
  * @property {boolean} [cMapPacked] - Specifies if the Adobe CMaps are binary
- *   packed or not.
+ *   packed or not. The default value is `true`.
  * @property {Object} [CMapReaderFactory] - The factory that will be used when
  *   reading built-in CMap files. Providing a custom factory is useful for
  *   environments without Fetch API or `XMLHttpRequest` support, such as
@@ -593,6 +604,9 @@ export let DefaultStandardFontDataFactory: typeof DOMStandardFontDataFactory;
  *   `OffscreenCanvas` in the worker. Primarily used to improve performance of
  *   image conversion/rendering.
  *   The default value is `true` in web environments and `false` in Node.js.
+ * @property {number} [canvasMaxAreaInBytes] - The integer value is used to
+ *   know when an image must be resized (uses `OffscreenCanvas` in the worker).
+ *   If it's -1 then a possibly slow algorithm is used to guess the max value.
  * @property {boolean} [disableFontFace] - By default fonts are converted to
  *   OpenType fonts and loaded via the Font Loading API or `@font-face` rules.
  *   If disabled, fonts will be rendered using a built-in font renderer that
@@ -623,11 +637,10 @@ export let DefaultStandardFontDataFactory: typeof DOMStandardFontDataFactory;
  *   disabling of pre-fetching to work correctly.
  * @property {boolean} [pdfBug] - Enables special hooks for debugging PDF.js
  *   (see `web/debugger.js`). The default value is `false`.
- */
-/**
- * @typedef { string | URL | TypedArray | ArrayBuffer |
- *            PDFDataRangeTransport | DocumentInitParameters
- * } GetDocumentParameters
+ * @property {Object} [canvasFactory] - The factory instance that will be used
+ *   when creating canvases. The default value is {new DOMCanvasFactory()}.
+ * @property {Object} [filterFactory] - A factory instance that will be used
+ *   to create SVG filters when rendering some images on the main canvas.
  */
 /**
  * This is the main entry point for loading a PDF and interacting with it.
@@ -636,14 +649,14 @@ export let DefaultStandardFontDataFactory: typeof DOMStandardFontDataFactory;
  * XHR as fallback) is used, which means it must follow same origin rules,
  * e.g. no cross-domain requests without CORS.
  *
- * @param {GetDocumentParameters}
+ * @param {string | URL | TypedArray | ArrayBuffer | DocumentInitParameters}
  *   src - Can be a URL where a PDF file is located, a typed array (Uint8Array)
  *         already populated with data, or a parameter object.
  * @returns {PDFDocumentLoadingTask}
  */
-export function getDocument(src: GetDocumentParameters): PDFDocumentLoadingTask;
+export function getDocument(src: string | URL | TypedArray | ArrayBuffer | DocumentInitParameters): PDFDocumentLoadingTask;
 export class LoopbackPort {
-    postMessage(obj: any, transfers: any): void;
+    postMessage(obj: any, transfer: any): void;
     addEventListener(name: any, listener: any): void;
     removeEventListener(name: any, listener: any): void;
     terminate(): void;
@@ -651,34 +664,65 @@ export class LoopbackPort {
 }
 /**
  * Abstract class to support range requests file loading.
+ *
+ * NOTE: The TypedArrays passed to the constructor and relevant methods below
+ * will generally be transferred to the worker-thread. This will help reduce
+ * main-thread memory usage, however it will take ownership of the TypedArrays.
  */
 export class PDFDataRangeTransport {
     /**
      * @param {number} length
-     * @param {Uint8Array} initialData
+     * @param {Uint8Array|null} initialData
      * @param {boolean} [progressiveDone]
      * @param {string} [contentDispositionFilename]
      */
-    constructor(length: number, initialData: Uint8Array, progressiveDone?: boolean | undefined, contentDispositionFilename?: string | undefined);
+    constructor(length: number, initialData: Uint8Array | null, progressiveDone?: boolean, contentDispositionFilename?: string);
     length: number;
-    initialData: Uint8Array;
+    initialData: Uint8Array<ArrayBufferLike> | null;
     progressiveDone: boolean;
     contentDispositionFilename: string;
     _rangeListeners: any[];
     _progressListeners: any[];
     _progressiveReadListeners: any[];
     _progressiveDoneListeners: any[];
-    _readyCapability: import("../shared/util.js").PromiseCapability;
-    addRangeListener(listener: any): void;
-    addProgressListener(listener: any): void;
-    addProgressiveReadListener(listener: any): void;
-    addProgressiveDoneListener(listener: any): void;
-    onDataRange(begin: any, chunk: any): void;
-    onDataProgress(loaded: any, total: any): void;
-    onDataProgressiveRead(chunk: any): void;
+    _readyCapability: PromiseCapability;
+    /**
+     * @param {function} listener
+     */
+    addRangeListener(listener: Function): void;
+    /**
+     * @param {function} listener
+     */
+    addProgressListener(listener: Function): void;
+    /**
+     * @param {function} listener
+     */
+    addProgressiveReadListener(listener: Function): void;
+    /**
+     * @param {function} listener
+     */
+    addProgressiveDoneListener(listener: Function): void;
+    /**
+     * @param {number} begin
+     * @param {Uint8Array|null} chunk
+     */
+    onDataRange(begin: number, chunk: Uint8Array | null): void;
+    /**
+     * @param {number} loaded
+     * @param {number|undefined} total
+     */
+    onDataProgress(loaded: number, total: number | undefined): void;
+    /**
+     * @param {Uint8Array|null} chunk
+     */
+    onDataProgressiveRead(chunk: Uint8Array | null): void;
     onDataProgressiveDone(): void;
     transportReady(): void;
-    requestDataRange(begin: any, end: any): void;
+    /**
+     * @param {number} begin
+     * @param {number} end
+     */
+    requestDataRange(begin: number, end: number): void;
     abort(): void;
 }
 /**
@@ -692,8 +736,8 @@ export class PDFDataRangeTransport {
  * after which individual pages can be rendered.
  */
 export class PDFDocumentLoadingTask {
-    static "__#15@#docId": number;
-    _capability: import("../shared/util.js").PromiseCapability;
+    static #docId: number;
+    _capability: PromiseCapability;
     _transport: any;
     _worker: any;
     /**
@@ -721,17 +765,6 @@ export class PDFDocumentLoadingTask {
      */
     onProgress: Function;
     /**
-     * Callback for when an unsupported feature is used in the PDF document.
-     * The callback receives an {@link UNSUPPORTED_FEATURES} argument.
-     * @type {function}
-     */
-    set onUnsupportedFeature(arg: Function | null);
-    /**
-     * @type {function | null} The current callback used with unsupported
-     * features.
-     */
-    get onUnsupportedFeature(): Function | null;
-    /**
      * Promise for document loading task completion.
      * @type {Promise<PDFDocumentProxy>}
      */
@@ -742,7 +775,6 @@ export class PDFDocumentLoadingTask {
      *   completed.
      */
     destroy(): Promise<void>;
-    #private;
 }
 /**
  * Proxy to a `PDFDocument` in the worker thread.
@@ -756,6 +788,10 @@ export class PDFDocumentProxy {
      */
     get annotationStorage(): AnnotationStorage;
     /**
+     * @type {Object} The filter factory instance.
+     */
+    get filterFactory(): Object;
+    /**
      * @type {number} Total number of pages in the PDF file.
      */
     get numPages(): number;
@@ -765,38 +801,7 @@ export class PDFDocumentProxy {
      *   NOTE: The first element will always be defined for all PDF documents,
      *   whereas the second element is only defined for *modified* PDF documents.
      */
-    get fingerprints(): string[];
-    /**
-     * @typedef {Object} PDFDocumentStats
-     * @property {Object<string, boolean>} streamTypes - Used stream types in the
-     *   document (an item is set to true if specific stream ID was used in the
-     *   document).
-     * @property {Object<string, boolean>} fontTypes - Used font types in the
-     *   document (an item is set to true if specific font ID was used in the
-     *   document).
-     */
-    /**
-     * @type {PDFDocumentStats | null} The current statistics about document
-     *   structures, or `null` when no statistics exists.
-     */
-    get stats(): {
-        /**
-         * - Used stream types in the
-         * document (an item is set to true if specific stream ID was used in the
-         * document).
-         */
-        streamTypes: {
-            [x: string]: boolean;
-        };
-        /**
-         * - Used font types in the
-         * document (an item is set to true if specific font ID was used in the
-         * document).
-         */
-        fontTypes: {
-            [x: string]: boolean;
-        };
-    } | null;
+    get fingerprints(): Array<string, string | null>;
     /**
      * @type {boolean} True if only XFA form.
      */
@@ -870,15 +875,9 @@ export class PDFDocumentProxy {
      */
     getAttachments(): Promise<any>;
     /**
-     * @returns {Promise<Array<string> | null>} A promise that is resolved with
-     *   an {Array} of all the JavaScript strings in the name tree, or `null`
-     *   if no JavaScript exists.
-     */
-    getJavaScript(): Promise<Array<string> | null>;
-    /**
      * @returns {Promise<Object | null>} A promise that is resolved with
      *   an {Object} with the JavaScript actions:
-     *     - from the name tree (like getJavaScript);
+     *     - from the name tree.
      *     - from A or AA entries in the catalog dictionary.
      *   , or `null` if no JavaScript exists.
      */
@@ -901,7 +900,7 @@ export class PDFDocumentProxy {
      * @returns {Promise<Array<OutlineNode>>} A promise that is resolved with an
      *   {Array} that is a tree outline (if it has one) of the PDF file.
      */
-    getOutline(): Promise<{
+    getOutline(): Promise<Array<{
         title: string;
         bold: boolean;
         italic: boolean;
@@ -915,8 +914,8 @@ export class PDFDocumentProxy {
         unsafeUrl: string | undefined;
         newWindow: boolean | undefined;
         count: number | undefined;
-        items: any[];
-    }[]>;
+        items: Array</*elided*/ any>;
+    }>>;
     /**
      * @returns {Promise<OptionalContentConfig>} A promise that is resolved with
      *   an {@link OptionalContentConfig} that contains all the optional content
@@ -987,7 +986,7 @@ export class PDFDocumentProxy {
      *   option unless absolutely necessary. The default value is `false`.
      * @returns {Promise} A promise that is resolved when clean-up has finished.
      */
-    cleanup(keepLoadedFonts?: boolean | undefined): Promise<any>;
+    cleanup(keepLoadedFonts?: boolean): Promise<any>;
     /**
      * Destroys the current document instance and terminates the worker.
      */
@@ -1039,10 +1038,10 @@ export class PDFDocumentProxy {
  * Page getTextContent parameters.
  *
  * @typedef {Object} getTextContentParameters
- * @property {boolean} disableCombineTextItems - Do not attempt to combine
- *   same line {@link TextItem}'s. The default value is `false`.
  * @property {boolean} [includeMarkedContent] - When true include marked
  *   content items in the items array of TextContent. The default is `false`.
+ * @property {boolean} [disableNormalization] - When true the text is *not*
+ *   normalized in the worker-thread. The default is `false`.
  */
 /**
  * Page text content.
@@ -1097,7 +1096,8 @@ export class PDFDocumentProxy {
  * Page render parameters.
  *
  * @typedef {Object} RenderParameters
- * @property {Object} canvasContext - A 2D context of a DOM Canvas object.
+ * @property {CanvasRenderingContext2D} canvasContext - A 2D context of a DOM
+ *   Canvas object.
  * @property {PageViewport} viewport - Rendering viewport obtained by calling
  *   the `PDFPageProxy.getViewport` method.
  * @property {string} [intent] - Rendering intent, can be 'display', 'print',
@@ -1116,9 +1116,8 @@ export class PDFDocumentProxy {
  *   The default value is `AnnotationMode.ENABLE`.
  * @property {Array<any>} [transform] - Additional transform, applied just
  *   before viewport transform.
- * @property {Object} [canvasFactory] - The factory instance that will be used
- *   when creating canvases. The default value is {new DOMCanvasFactory()}.
- * @property {Object | string} [background] - Background to use for the canvas.
+ * @property {CanvasGradient | CanvasPattern | string} [background] - Background
+ *   to use for the canvas.
  *   Any valid `canvas.fillStyle` can be used: a `DOMString` parsed as CSS
  *   <color> value, a `CanvasGradient` object (a linear or radial gradient) or
  *   a `CanvasPattern` object (a repetitive image). The default value is
@@ -1187,19 +1186,16 @@ export class PDFDocumentProxy {
  * Proxy to a `PDFPage` in the worker thread.
  */
 export class PDFPageProxy {
-    constructor(pageIndex: any, pageInfo: any, transport: any, ownerDocument: any, pdfBug?: boolean);
+    constructor(pageIndex: any, pageInfo: any, transport: any, pdfBug?: boolean);
     _pageIndex: any;
     _pageInfo: any;
-    _ownerDocument: any;
     _transport: any;
     _stats: StatTimer | null;
     _pdfBug: boolean;
     /** @type {PDFObjects} */
     commonObjs: PDFObjects;
     objs: PDFObjects;
-    _bitmaps: Set<any>;
-    cleanupAfterRender: boolean;
-    pendingCleanup: boolean;
+    _maybeCleanupAfterRender: boolean;
     _intentStates: Map<any, any>;
     destroyed: boolean;
     /**
@@ -1222,7 +1218,7 @@ export class PDFPageProxy {
      * @type {Array<number>} An array of the visible portion of the PDF page in
      *   user space units [x1, y1, x2, y2].
      */
-    get view(): number[];
+    get view(): Array<number>;
     /**
      * @param {GetViewportParameters} params - Viewport parameters.
      * @returns {PageViewport} Contains 'width' and 'height' properties
@@ -1241,6 +1237,10 @@ export class PDFPageProxy {
      */
     getJSActions(): Promise<Object>;
     /**
+     * @type {Object} The filter factory instance.
+     */
+    get filterFactory(): Object;
+    /**
      * @type {boolean} True if only XFA form.
      */
     get isPureXfa(): boolean;
@@ -1258,7 +1258,7 @@ export class PDFPageProxy {
      * @returns {RenderTask} An object that contains a promise that is
      *   resolved when the page finishes rendering.
      */
-    render({ canvasContext, viewport, intent, annotationMode, transform, canvasFactory, background, optionalContentConfigPromise, annotationCanvasMap, pageColors, printAnnotationStorage, }: RenderParameters): RenderTask;
+    render({ canvasContext, viewport, intent, annotationMode, transform, background, optionalContentConfigPromise, annotationCanvasMap, pageColors, printAnnotationStorage, }: RenderParameters): RenderTask;
     /**
      * @param {GetOperatorListParameters} params - Page getOperatorList
      *   parameters.
@@ -1273,7 +1273,7 @@ export class PDFPageProxy {
      * @param {getTextContentParameters} params - getTextContent parameters.
      * @returns {ReadableStream} Stream for reading text content chunks.
      */
-    streamTextContent({ disableCombineTextItems, includeMarkedContent, }?: getTextContentParameters): ReadableStream;
+    streamTextContent({ includeMarkedContent, disableNormalization, }?: getTextContentParameters): ReadableStream;
     /**
      * NOTE: All occurrences of whitespace will be replaced by
      * standard spaces (0x20).
@@ -1301,12 +1301,7 @@ export class PDFPageProxy {
      *   The default value is `false`.
      * @returns {boolean} Indicates if clean-up was successfully run.
      */
-    cleanup(resetStats?: boolean | undefined): boolean;
-    /**
-     * Attempts to clean up if rendering is in a state where that's possible.
-     * @private
-     */
-    private _tryCleanup;
+    cleanup(resetStats?: boolean): boolean;
     /**
      * @private
      */
@@ -1324,9 +1319,11 @@ export class PDFPageProxy {
      */
     private _abortOperatorList;
     /**
-     * @type {Object} Returns page stats, if enabled; returns `null` otherwise.
+     * @type {StatTimer | null} Returns page stats, if enabled; returns `null`
+     *   otherwise.
      */
-    get stats(): Object;
+    get stats(): StatTimer | null;
+    #private;
 }
 /**
  * PDF.js web worker abstraction that controls the instantiation of PDF
@@ -1337,7 +1334,7 @@ export class PDFPageProxy {
  * @param {PDFWorkerParameters} params - The worker initialization parameters.
  */
 export class PDFWorker {
-    static "__#17@#workerPorts": WeakMap<object, any>;
+    static #workerPorts: any;
     /**
      * @param {PDFWorkerParameters} params - The worker initialization parameters.
      */
@@ -1347,7 +1344,7 @@ export class PDFWorker {
      * @type {string}
      */
     static get workerSrc(): string;
-    static get _mainThreadWorkerMessageHandler(): any;
+    static get #mainThreadWorkerMessageHandler(): any;
     static get _setupFakeWorkerGlobal(): any;
     constructor({ name, port, verbosity, }?: {
         name?: null | undefined;
@@ -1357,7 +1354,7 @@ export class PDFWorker {
     name: any;
     destroyed: boolean;
     verbosity: number;
-    _readyCapability: import("../shared/util.js").PromiseCapability;
+    _readyCapability: PromiseCapability;
     _port: any;
     _webWorker: Worker | null;
     _messageHandler: MessageHandler | null;
@@ -1385,9 +1382,8 @@ export class PDFWorker {
     destroy(): void;
 }
 export namespace PDFWorkerUtil {
-    const isWorkerDisabled: boolean;
-    const fallbackWorkerSrc: null;
-    const fakeWorkerId: number;
+    let isWorkerDisabled: boolean;
+    let fakeWorkerId: number;
 }
 /**
  * Allows controlling of the rendering tasks.
@@ -1413,7 +1409,7 @@ export class RenderTask {
      *
      * @param {number} [extraDelay]
      */
-    cancel(extraDelay?: number | undefined): void;
+    cancel(extraDelay?: number): void;
     /**
      * Whether form fields are rendered separately from the main operatorList.
      * @type {boolean}
@@ -1421,26 +1417,19 @@ export class RenderTask {
     get separateAnnots(): boolean;
     #private;
 }
-/**
- * Sets the function that instantiates an {IPDFStream} as an alternative PDF
- * data transport.
- *
- * @param {IPDFStreamFactory} pdfNetworkStreamFactory - The factory function
- *   that takes document initialization parameters (including a "url") and
- *   returns a promise which is resolved with an instance of {IPDFStream}.
- * @ignore
- */
-export function setPDFNetworkStreamFactory(pdfNetworkStreamFactory: IPDFStreamFactory): void;
 /** @type {string} */
 export const version: string;
 import { PageViewport } from "./display_utils.js";
 import { OptionalContentConfig } from "./optional_content_config.js";
 import { PrintAnnotationStorage } from "./annotation_storage.js";
 import { DOMCanvasFactory } from "./display_utils.js";
-import { DOMCMapReaderFactory } from "./display_utils.js";
-import { DOMStandardFontDataFactory } from "./display_utils.js";
+import { NodeCanvasFactory } from "./node_utils";
+import { NodeCMapReaderFactory } from "./node_utils";
+import { DOMFilterFactory } from "./display_utils.js";
+import { NodeFilterFactory } from "./node_utils";
+import { NodeStandardFontDataFactory } from "./node_utils";
+import { PromiseCapability } from "../shared/util.js";
 import { AnnotationStorage } from "./annotation_storage.js";
-import { info } from "../shared/util.js";
 import { Metadata } from "./metadata.js";
 import { StatTimer } from "./display_utils.js";
 /**
@@ -1461,7 +1450,7 @@ declare class PDFObjects {
      * @param {function} [callback]
      * @returns {any}
      */
-    get(objId: string, callback?: Function | undefined): any;
+    get(objId: string, callback?: Function): any;
     /**
      * @param {string} objId
      * @returns {boolean}
@@ -1475,6 +1464,7 @@ declare class PDFObjects {
      */
     resolve(objId: string, data?: any): void;
     clear(): void;
+    [Symbol.iterator](): Generator<any[], void, unknown>;
     #private;
 }
 import { MessageHandler } from "../shared/message_handler.js";

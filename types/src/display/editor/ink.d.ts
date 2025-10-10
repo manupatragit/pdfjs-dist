@@ -5,29 +5,38 @@ export class InkEditor extends AnnotationEditor {
     static _defaultColor: null;
     static _defaultOpacity: number;
     static _defaultThickness: number;
-    static _l10nPromise: any;
     static _type: string;
+    static _editorType: number;
+    /** @inheritdoc */
     static initialize(l10n: any): void;
+    /** @inheritdoc */
     static updateDefaultParams(type: any, value: any): void;
+    /** @inheritdoc */
     static get defaultPropertiesToUpdate(): any[][];
     /**
-     * Convert the output of fitCurve in some Path2D.
-     * @param {Arra<Array<number>} bezier
+     * Convert into a Path2D.
+     * @param {Array<Array<number>>} bezier
      * @returns {Path2D}
      */
-    static "__#2@#buildPath2D"(bezier: Arra<number[]>): Path2D;
+    static #buildPath2D(bezier: Array<Array<number>>): Path2D;
+    static #toPDFCoordinates(points: any, rect: any, rotation: any): any;
+    static #fromPDFCoordinates(points: any, rect: any, rotation: any): any;
     /** @inheritdoc */
-    static deserialize(data: any, parent: any, uiManager: any): AnnotationEditor;
+    static deserialize(data: any, parent: any, uiManager: any): AnnotationEditor | null;
+    static deserializeFromJSON(data: any, parent: any, uiManager: any): AnnotationEditor | null;
     constructor(params: any);
     color: any;
     thickness: any;
     opacity: any;
     paths: any[];
     bezierPath2D: any[];
+    allRawPaths: any[];
     currentPath: any[];
     scaleFactor: number;
     translationX: number;
     translationY: number;
+    left: number;
+    top: number;
     /** @inheritdoc */
     updateParams(type: any, value: any): void;
     /** @inheritdoc */
@@ -55,8 +64,6 @@ export class InkEditor extends AnnotationEditor {
      */
     canvasPointerleave(event: PointerEvent): void;
     ctx: CanvasRenderingContext2D | null | undefined;
-    /** @inheritdoc */
-    render(): HTMLDivElement | null;
     /**
      * When the dimensions of the div change the inner canvas must
      * renew its dimensions, hence it must redraw its own contents.
@@ -72,14 +79,52 @@ export class InkEditor extends AnnotationEditor {
         thickness: any;
         opacity: any;
         paths: {
-            bezier: number[];
-            points: number[];
+            bezier: any;
+            points: any;
         }[];
         pageIndex: number;
         rect: any[];
-        rotation: any;
+        rotation: number;
+        structTreeParentId: any;
+    } | null;
+    serializeToJSON(): {
+        annotationType: number;
+        action: string;
+        apiId: never;
+        color?: undefined;
+        opacity?: undefined;
+        thickness?: undefined;
+        paths?: undefined;
+        width?: undefined;
+        height?: undefined;
+        top?: undefined;
+        left?: undefined;
+        bezierPath2D?: undefined;
+        pageIndex?: undefined;
+        rect?: undefined;
+        rotation?: undefined;
+        text?: undefined;
+    } | {
+        annotationType: number;
+        color: any;
+        opacity: any;
+        thickness: any;
+        paths: any[];
+        width: any;
+        height: any;
+        top: string;
+        left: string;
+        bezierPath2D: {
+            bezier: any;
+            points: any;
+        }[];
+        pageIndex: number;
+        rect: any[];
+        rotation: number;
+        text: string;
+        action: string;
+        apiId?: undefined;
     } | null;
     #private;
 }
 import { AnnotationEditor } from "./editor.js";
-export { fitCurve };
